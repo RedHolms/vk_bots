@@ -32,6 +32,8 @@ class VkAPI(object):
                 raise ApiResponseError(json)
 
             return response if returnRaw else json['response']
+        def execVKScript(self, code: str):
+            return self.methodRequest("execute", {'code': str(code)})
 
     class VkApiMethod(object): # СПИЖЕНО ИЗ МОДУЛЯ 'vk_api' ОТ 'python273'
         __slots__ = ('_vk', '_method')
