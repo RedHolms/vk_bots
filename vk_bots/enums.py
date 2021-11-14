@@ -26,7 +26,7 @@ class HandlerType(Enum):
     ```
     """
     CycleHandler = "cycle"
-    EventHandler = "event"
+    EventHandler = "event$DICT"
     InvalidParamsHandler = "params_error"
 
 class Event(Enum):

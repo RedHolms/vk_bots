@@ -47,12 +47,15 @@ class EnumMeta(type):
     def __setattr__(self, name: str, value: typing.Any) -> None: return
     def __contains__(self, value: typing.Any) -> bool:
         for attrName in self._get_enum_values():
-            if getattr(self, attrName) == value:
+            attrValue = getattr(self, attrName)
+            if type(attrValue) == EnumMeta and value in attrValue:
+                return True
+            elif attrValue == value:
                 return True
         return False
     def __iter__(self):
         for attrName in self._get_enum_values():
-            yield (attrName, getattr(self, attrName))
+            yield getattr(self, attrName)
 class Enum(metaclass=EnumMeta):
     def __new__(cls, *args, **kwargs): return cls
     
@@ -68,3 +71,7 @@ class Command(object):
     def __new__(cls, name: str, handler: typing.Callable, about: str = '', params: list[CommandParam] = []) -> dict:
         return {'name': str(name), 'about': str(about), 'params': params, 'handler': handler}
     def __init__(self, name: str, handler: typing.Callable, about: str = '', params: list[CommandParam] = []): pass
+
+class Empty(): 
+    def __getattribute__(self, name: str):
+        return Empty()

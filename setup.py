@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='vk_bots',
-    version='0.0.1',
+    version='1.0.0',
     description='Модуль для удобного создание ботов ВКонтакте',
     packages=['vk_bots'],
     install_requires=[

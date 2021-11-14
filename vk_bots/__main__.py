@@ -1,22 +1,81 @@
 import sys
 import traceback
-from types import FunctionType
 
 import requests
-
-import json
 
 from ._vkapi import VkAPI
 from .longpoll import LongPollManager
 from . import utils, types, enums
-import vk_bots
-
 
 class StopBot(Exception): pass
+
+vk_bots = types.Empty()
 
 class VKBots(object):
     """Main VKBots class"""
     def __new__(cls) -> None: return cls
+
+    class UserSession(object):
+        def __init__(self, user_id: int) -> None:
+            self.id = user_id
+            self.localData = types.Data()
+        def setLocalData(self, **kwargs):
+            for k, v in kwargs.items():
+                self.localData[k] = v
+        def getLocalData(self, key: str) -> types.typing.Any | None:
+            """If value doesnt't exists then returns `None`"""
+            key = str(key)
+            if key not in self.localData:
+                return None
+            else:
+                return self.localData[key]
+    class Message(object):
+        def __init__(self, messageID: int, vkApiSession: VkAPI.ApiSession,
+                    sender_id: int = None, peer_id: int = None, messageObject: dict = None) -> None:
+            self.id = messageID
+            
+            self.api = vkApiSession
+
+            self.object = messageObject or self.api.methodRequest('messages.getById', {'message_ids': str(self.id)})
+            if sender_id == None:
+                sender_id = self.object['from_id']
+            if peer_id == None:
+                peer_id = self.object['peer_id']
+            
+            self.senderID = sender_id
+            self.peerID = peer_id
+        def _answer_to_message(self, text: str, 
+            reply_to: int = None, forward_messages: list[int] = None, forward: dict = None,
+            dont_parse_links: bool = False, disable_mentions: bool = False,
+            random_id: int = 0) -> dict:
+            """Return API Response of 'messages.send' method"""
+
+            if not utils.only_one_of_values_not_equal(None, reply_to, forward_messages, forward):
+                raise ValueError("Only one of params: [reply_to, forward_messages, forward] can be not 'None'")
+            
+            params = {
+                "message": text,
+                "random_id": random_id,
+                "reply_to": reply_to,
+                "forward_messages": forward_messages,
+                "forward": forward,
+                "dont_parse_links": int(dont_parse_links),
+                "disable_mentions": int(disable_mentions),
+
+                "peer_id": self.peerID
+            }
+            return self.api.methodRequest("messages.send", params)
+
+        def Answer(self, text: str, *args, **kwargs):
+            """`text = text.format(*args, **kwargs)`"""
+            text = str(text).format(*args, **kwargs)
+
+            reply_to = None
+
+            if self.peerID > 2000000000:
+                reply_to = self.id
+            
+            self._answer_to_message(text, reply_to=reply_to)
 
     class HandlerType(enums.HandlerType): pass
     class Event(enums.Event): pass
@@ -60,13 +119,15 @@ class VKBots(object):
             if type(longPollServer) != LongPollManager.LongPollServer:
                 longPollServer = LongPollManager.LongPollServer(self.token, self.groupID, self.api, 30)
             self.longpoll = longPollServer
-
+            for _handler_type in self.HandlerType:
+                print(_handler_type)
             self._handlers = {
                 str(_handler_type) : 
                     dict() if str(_handler_type).endswith('$DICT') else 
                     list()
                     for _handler_type in self.HandlerType
             }
+            print(self._handlers)
 
             self._bot_started = False
 
@@ -199,14 +260,17 @@ class VKBots(object):
                             print("Exiting...")
                             raise SystemExit(1)
         def _iteration(self):
-            for handler in self._handlers[self.HandlerType]:
+            for handler in self._handlers[self.HandlerType.CycleHandler]:
                 self._call_handler(handler)
+
+    # ===============================
 
     class Bot(BotEmpty):
         # Handlers
 
         def RegisterEventHandler(self, event: enums.Event, handler: types.typing.Callable) -> int:
             event = str(event)
+            print(event in self.Event)
             if event not in self.Event:
                 raise TypeError("Invalid type of param #1 'event': Invalid event")
             if not callable(handler):
@@ -263,34 +327,55 @@ class VKBots(object):
         # Methods declaration
 
         def onCycle(self): pass
+        def onInvalidParams(self, messageObject: dict, receivedParams: list, expectedParams: list, invalidParamIndex: int): pass
 
-        def onEvent_Message_New(self): pass
+        def onEvent_EVENT_PATH(self, eventObject: dict): pass
+        def onCommand_COMMAND(self, messageObject: dict, params: list, userSession: vk_bots.VKBots.UserSession, messageClass: vk_bots.VKBots.Message): 
+            """This method is just a hint about params of commands handlers"""
+            pass
 
         # Methods initialization
         
         def onInit(self):
-            self._commands = {}
-            self.commandPrefix = self.SetCommandPrefix()
+            self._commands: dict[str, dict] = {}
+            #
+            # Commands format:
+            # {
+            #   "CMD_NAME": types.Command()
+            # }
+            #
+            self._users: dict[int, VKBots.UserSession] = {}
+            self.SetCommandPrefix()
 
-            def _onCycle(self: self):
+            def _onCycle(self: VKBots.Bot):
                 # Updating longpoll server
                 self.longpoll.update()
 
                 for event in self.longpoll.events:
-                    eventType = event['type']
+                    eventType = str(event['type'])
+                    if self.Event._find_value_path(eventType) == None:
+                        raise Exception("Handled unknown event: <%s>" % eventType)
                     eventObject = event['object']
 
-                    if eventType in self._handlers[self.HandlerType.EventHandler]:
-                        handlers = self._handlers[self.HandlerType.EventHandler]
-                        if type(handlers) == list:
-                            for handler in handlers:
-                                self._call_handler(handler, eventObject)
-                        else:
-                            self._call_handler(handlers, eventObject)
+                    handlerMethodName = "onEvent_" + str(self.Event._find_value_path(eventType))
+                    if hasattr(self, handlerMethodName):
+                        hndl = getattr(self, handlerMethodName)
+                        self._call_handler(hndl, eventObject)
+                    
+                    if eventType in self._handlers[self.HandlerType.EventHandler]:                        
+                        if eventType in self._handlers[self.HandlerType.EventHandler]:
+                            handlers = self._handlers[self.HandlerType.EventHandler][eventType]
+                            if type(handlers) == list:
+                                for handler in handlers:
+                                    if handler == hndl: continue
+                                    self._call_handler(handler, eventObject)
+                            else:
+                                if handlers == hndl: continue
+                                self._call_handler(handlers, eventObject)
                     continue
                 return
             
-            def _onEvent_Message_New(self: self, eventObject: dict):
+            def _onEvent_Message_New(self: VKBots.Bot, eventObject: dict):
                 messageObject = eventObject['message']
                 messageID: int = messageObject['id']
                 messageText: str = messageObject['text']
@@ -306,7 +391,29 @@ class VKBots(object):
                     cmdText = splited[0]
                     cmdParams = splited[1:]
 
-
+                    if cmdText in self._commands:
+                        cmdObj = self._commands[cmdText]
+                        cmdExpectedParams = cmdObj['params']
+                        cmdParams, validParams, errorIndex = utils.check_params(cmdExpectedParams, cmdParams)
+                        if not validParams:
+                            # Calling on params error handlers
+                            self.onInvalidParams(messageObject, cmdParams, cmdExpectedParams, errorIndex)
+                            for handler in self._handlers[self.HandlerType.InvalidParamsHandler]:
+                                self._call_handler(handler, messageObject, cmdParams, cmdExpectedParams, errorIndex)
+                            return
+                        
+                        # Calling command handlers
+                        if not messageSenderID in self._users:
+                            userSession = VKBots.UserSession(messageSenderID)
+                            self._users[messageSenderID] = userSession
+                        else:
+                            userSession = self._users[messageSenderID]
+                        messageClass = VKBots.Message(messageID, self.api, messageSenderID, messagePeerID, messageObject)
+                        
+                        self._call_handler(cmdObj['handler'], messageObject, cmdParams, userSession, messageClass)
                 return
+            
+            self.RegisterCycleHandler(_onCycle)
+            self.RegisterEventHandler(self.Event.Message.New, _onEvent_Message_New)
             return
         pass

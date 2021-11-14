@@ -1,3 +1,6 @@
+import typing
+
+
 def remove_char_by_index(string: str, index: int):
     return string[:index] + string[index+1:]
 
@@ -39,3 +42,22 @@ def check_params(expectedParams: list, receivedParams: list):
     del i
 
     return receivedParams, True, -1
+
+def only_one_of_values_equal(value: typing.Any, *args):
+    already = False
+    for var in args:
+        if var == value:
+            if already == True:
+                return False
+            else:
+                already = True
+    return True
+def only_one_of_values_not_equal(value: typing.Any, *args):
+    already = False
+    for var in args:
+        if var != value:
+            if already == True:
+                return False
+            else:
+                already = True
+    return True
