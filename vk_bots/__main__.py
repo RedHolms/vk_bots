@@ -119,15 +119,12 @@ class VKBots(object):
             if type(longPollServer) != LongPollManager.LongPollServer:
                 longPollServer = LongPollManager.LongPollServer(self.token, self.groupID, self.api, 30)
             self.longpoll = longPollServer
-            for _handler_type in self.HandlerType:
-                print(_handler_type)
             self._handlers = {
                 str(_handler_type) : 
                     dict() if str(_handler_type).endswith('$DICT') else 
                     list()
                     for _handler_type in self.HandlerType
             }
-            print(self._handlers)
 
             self._bot_started = False
 
@@ -270,7 +267,6 @@ class VKBots(object):
 
         def RegisterEventHandler(self, event: enums.Event, handler: types.typing.Callable) -> int:
             event = str(event)
-            print(event in self.Event)
             if event not in self.Event:
                 raise TypeError("Invalid type of param #1 'event': Invalid event")
             if not callable(handler):

@@ -9,5 +9,5 @@ from .longpoll import LongPollManager
 from .exceptions import *
 from . import utils, types, enums
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 __author__ = "RedHolms"
